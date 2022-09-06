@@ -322,36 +322,37 @@ class PGNN:
             
             if len(physicsGradientList) ==0:
                 
-                for i in range(0, 10):
-                    # adding L_def + L_phy1 + L_phy2
-                    physicsGradientList_plus_defaultGradient = defaultGradient[i]
-                    addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)          
-                # print(addition_of_physics_default_losses)
+                addition_of_physics_default_losses = defaultGradient
                 
-            if len(physicsGradientList) ==1:
-                for i in range(0, 10):
-                    physicsGradientList_plus_physics_losses = physicsGradientList[0][i]
-                    addition_of_physics_losses_l1_l2.append(physicsGradientList_plus_physics_losses)
-                # print(addition_of_physics_losses_l1_l2) 
-                
-                for i in range(0, 10):
-                    # adding L_def + L_phy1 + L_phy2
-                    physicsGradientList_plus_defaultGradient =addition_of_physics_losses_l1_l2[i] + defaultGradient[i]
-                    addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)          
-                # print(addition_of_physics_default_losses)  
+                # for i in range(0, 10):
+                #     # adding L_def + L_phy1 + L_phy2
+                #     physicsGradientList_plus_defaultGradient = defaultGradient[i]
+                #     addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)          
+                print(addition_of_physics_default_losses)
             
-            if len(physicsGradientList) ==2:
+            elif len(physicsGradientList) ==1:
+                # for i in range(0, 10):
+                #     physicsGradientList_plus_physics_losses = physicsGradientList[0][i]
+                #     addition_of_physics_losses_l1_l2.append(physicsGradientList_plus_physics_losses)
+                # addition_of_physics_losses_l1_l2 = physicsGradientList[0]
+                
                 for i in range(0, 10):
-                    # adding  dL_phy1/dp + dL_phy2/dp
-                    physicsGradientList_plus_physics_losses = physicsGradientList[0][i] + physicsGradientList[1][i]
-                    addition_of_physics_losses_l1_l2.append(physicsGradientList_plus_physics_losses)          
-                # print(addition_of_physics_losses_l1_l2)  
+                    # adding L_def + L_phy1 + L_phy2
+                    physicsGradientList_plus_defaultGradient =physicsGradientList[0][i] + defaultGradient[i]
+                    addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)         
+                print(addition_of_physics_default_losses) 
+                
+            
+            else:
+                # Adding all of the losses from the physics constraints that were differentiated the L with respect to p:
+                addition_of_physics_losses_l1_l2 = [sum(i) for i in zip(*physicsGradientList)]
                 
                 for i in range(0, 10):
                     # adding L_def + L_phy1 + L_phy2
                     physicsGradientList_plus_defaultGradient =addition_of_physics_losses_l1_l2[i] + defaultGradient[i]
                     addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)          
-                # print(addition_of_physics_default_losses) 
+                print(addition_of_physics_default_losses)  
+            
             
             
             # gradient = defaultGradient 
