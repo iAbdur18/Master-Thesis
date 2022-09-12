@@ -88,7 +88,7 @@ class PGNN:
 
     def __init__(self, *layers, optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.1), default_loss_function='mse',
                  physics_loss_function=None,
-                 lambda_default=1, lambda_physics=1, early_stop_limit=2e-6):
+                 lambda_default=1, lambda_physics=1, early_stop_limit=2e-6, apply_filter = False):
 
         self.lambda_physics = lambda_physics  # physics loss regularization term
         self.lambda_default = lambda_default  # default loss regularization term
@@ -119,6 +119,9 @@ class PGNN:
 
         # set the custom physics loss function if one was supplied, else this is set to none
         self.physics_loss_function = physics_loss_function
+
+        # should the PGNN loss be filtered or not?
+        self.apply_PGNN_filter = apply_filter
 
         # stop flag if the loss becomes too small
         self.early_stop_limit = early_stop_limit
@@ -287,7 +290,10 @@ class PGNN:
 
         """
 
+
         with tf.GradientTape(persistent=True) as tape:
+            # calculate the loss for the current epoch
+            training_loss, default_loss, physics_loss = self.get_loss(X_train, y_train)
 
             layer_variables_list = []  # hold the layer variables with respect to which differentiation will be done
             for layer in self.network_layers:
@@ -296,67 +302,74 @@ class PGNN:
                     tape.watch(variable)  # first you need to watch all the variables in all of the layers
                     layer_variables_list.append(variable)  # ensure that all the layer variables are appended !
 
-                    # calculate the loss for the current epoch
-            training_loss, default_loss, physics_loss = self.get_loss(X_train,
-                                                                      y_train)
+
 
             # perform auto differentiation
             #gradient = tape.gradient(training_loss, layer_variables_list)
             defaultGradient  = tape.gradient(default_loss, layer_variables_list)
             
             physicsGradientList = []
-            for L_i in physics_loss:
-                if L_i > 0:
-                     dL_dw_lists = tape.gradient(L_i, layer_variables_list)
-                     physicsGradientList.append(dL_dw_lists)
+            if self.physics_loss_function is not None:
+                for L_i in physics_loss:
+                    if (L_i > 0) or not self.apply_PGNN_filter:
+                         dL_dw_lists = tape.gradient(L_i, layer_variables_list)
+                         physicsGradientList.append(dL_dw_lists)
             # physicsGraident  = tape.graident(physics_loss, layer_variables_list)
             # print(physicsGradientList)
-            
-            # Addition of the two gradient lists
-            addition_of_physics_losses_l1_l2 = []
-            addition_of_physics_default_losses = []
-            
-            # for i in len(physicsGradientList):
-            # for i in range(0, len(physicsGradientList)):  
-            # x = x.append(physicsGradientList[i])
-            
-            if len(physicsGradientList) ==0:
-                
-                addition_of_physics_default_losses = defaultGradient
-                
-                # for i in range(0, 10):
-                #     # adding L_def + L_phy1 + L_phy2
-                #     physicsGradientList_plus_defaultGradient = defaultGradient[i]
-                #     addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)          
-                print(addition_of_physics_default_losses)
-            
-            elif len(physicsGradientList) ==1:
-                # for i in range(0, 10):
-                #     physicsGradientList_plus_physics_losses = physicsGradientList[0][i]
-                #     addition_of_physics_losses_l1_l2.append(physicsGradientList_plus_physics_losses)
-                # addition_of_physics_losses_l1_l2 = physicsGradientList[0]
-                
-                for i in range(0, 10):
-                    # adding L_def + L_phy1 + L_phy2
-                    physicsGradientList_plus_defaultGradient =physicsGradientList[0][i] + defaultGradient[i]
-                    addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)         
-                print(addition_of_physics_default_losses) 
-                
-            
-            else:
-                # Adding all of the losses from the physics constraints that were differentiated the L with respect to p:
-                addition_of_physics_losses_l1_l2 = [sum(i) for i in zip(*physicsGradientList)]
-                
-                for i in range(0, 10):
-                    # adding L_def + L_phy1 + L_phy2
-                    physicsGradientList_plus_defaultGradient =addition_of_physics_losses_l1_l2[i] + defaultGradient[i]
-                    addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)          
-                print(addition_of_physics_default_losses)  
-            
-            
-            
-            # gradient = defaultGradient 
-            gradient = addition_of_physics_default_losses 
+            gradient = defaultGradient
+            if True: #self.physics_loss_function is not None:
+                if len(physicsGradientList) > 0:
+                    for iList in physicsGradientList:
+                        for iL in range(len(iList)):
+                            gradient[iL] += iList[iL]
+
+
+
+            # # Addition of the two gradient lists
+            # addition_of_physics_losses_l1_l2 = []
+            # addition_of_physics_default_losses = []
+            #
+            # # for i in len(physicsGradientList):
+            # # for i in range(0, len(physicsGradientList)):
+            # # x = x.append(physicsGradientList[i])
+            #
+            # if len(physicsGradientList) ==0:
+            #
+            #     addition_of_physics_default_losses = defaultGradient
+            #
+            #     # for i in range(0, 10):
+            #     #     # adding L_def + L_phy1 + L_phy2
+            #     #     physicsGradientList_plus_defaultGradient = defaultGradient[i]
+            #     #     addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)
+            #     print(addition_of_physics_default_losses)
+            #
+            # elif len(physicsGradientList) ==1:
+            #     # for i in range(0, 10):
+            #     #     physicsGradientList_plus_physics_losses = physicsGradientList[0][i]
+            #     #     addition_of_physics_losses_l1_l2.append(physicsGradientList_plus_physics_losses)
+            #     # addition_of_physics_losses_l1_l2 = physicsGradientList[0]
+            #
+            #     for i in range(0, 10):
+            #         # adding L_def + L_phy1 + L_phy2
+            #         physicsGradientList_plus_defaultGradient =physicsGradientList[0][i] + defaultGradient[i]
+            #         addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)
+            #     print(addition_of_physics_default_losses)
+            #
+            #
+            # else:
+            #     # Adding all of the losses from the physics constraints that were differentiated the L with respect to p:
+            #     addition_of_physics_losses_l1_l2 = [sum(i) for i in zip(*physicsGradientList)]
+            #
+            #     for i in range(0, 10):
+            #         # adding L_def + L_phy1 + L_phy2
+            #         physicsGradientList_plus_defaultGradient =addition_of_physics_losses_l1_l2[i] + defaultGradient[i]
+            #         addition_of_physics_default_losses.append(physicsGradientList_plus_defaultGradient)
+            #     print(addition_of_physics_default_losses)
+            #
+            #
+            #
+            # # gradient = defaultGradient
+            # gradient = addition_of_physics_default_losses
         return gradient, layer_variables_list, training_loss, default_loss, physics_loss
 
     # perform gradient descent
@@ -494,8 +507,9 @@ class PGNN:
             training_loss = training_loss.numpy()  # extract the loss value from the tensor
             self.training_loss_array = np.append(self.training_loss_array, training_loss)
             physics_loss = 0.0
-            for pL_i in physics_loss_list:
-                physics_loss += pL_i.numpy()  # extract the loss value from the tensor
+            if self.physics_loss_function is not None:
+                for pL_i in physics_loss_list:
+                    physics_loss += pL_i.numpy()  # extract the loss value from the tensor
             self.physics_loss_array = np.append(self.physics_loss_array, physics_loss)
 
             default_loss = default_loss.numpy()  # extract the loss value from the tensor
@@ -506,6 +520,8 @@ class PGNN:
             if training_loss < self.early_stop_limit:
                 print('\nLoss value too small. Stopping training early prematurely !')
                 break
-
+        tic_toc = str(time.process_time() - start)
         print('\nPGNN Model trained successfully !' + ' Epochs Completed: ' + str(self.epoch_array[-1]))
-        print('\nTime taken to train: ' + str(time.process_time() - start))
+        print('\nTime taken to train: ' + tic_toc)
+
+        return default_loss, tic_toc

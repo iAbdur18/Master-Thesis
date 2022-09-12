@@ -19,13 +19,13 @@ from tf_pgnn import PGNN
 # %%
 print('Importing Custom Inputs (X_train and X_test ) and Outputs (y_train and y_test) Function Being Called')
 X_train_HyperParametersModel = pd.read_excel(
-    "C:/Users/Abdur Rehman/Thesis Code/X_train_HyperParametersModel.xlsx")
+    "X_train_HyperParametersModel.xlsx")
 X_test_HyperParametersModel = pd.read_excel(
-    "C:/Users/Abdur Rehman/Thesis Code/X_test_HyperParametersModel.xlsx")
+    "X_test_HyperParametersModel.xlsx")
 y_train_HyperParametersModel = pd.read_excel(
-    "C:/Users/Abdur Rehman/Thesis Code/y_train_HyperParametersModel.xlsx")
+    "y_train_HyperParametersModel.xlsx")
 y_test_HyperParametersModel = pd.read_excel(
-    "C:/Users/Abdur Rehman/Thesis Code/y_test_HyperParametersModel.xlsx")
+    "y_test_HyperParametersModel.xlsx")
 
 # %%
 rows_CLS, columns_CLS = X_test_HyperParametersModel.shape
@@ -33,7 +33,7 @@ rows_CLS, columns_CLS = X_test_HyperParametersModel.shape
 print(' Importing the Best Hyperparameters Values from the Vanialla Netwrok ')
 
 best_hp_Dataframe = pd.read_excel(
-    "C:/Users/Abdur Rehman/Thesis Code/best_hp_Dataframe.xlsx")
+    "best_hp_Dataframe.xlsx")
 
 # %%
 print(' Extracting the values from the Best Hyperparameters variable')
@@ -202,6 +202,13 @@ def network_derivative_loss(params_1):
 xavier = tf.keras.initializers.RandomNormal(mean=0.0, stddev=1.0)
 
 # using an MLP
+modelVan = tf.keras.Sequential()
+modelVan.add(tf.keras.layers.Dense(X_train_HyperParametersModel.shape[1]))
+for i in range(best_hp_Dataframe.hidden_layers[0]):
+    modelVan.add(tf.keras.layers.Dense(units_nodes_, kernel_initializer=xavier, activation="sigmoid"))
+modelVan.add(tf.keras.layers.Dense(4,  kernel_initializer=xavier))
+modelVan.compile(optimizer='sgd', loss='mse')
+
 model = PGNN(
 
     # tf.keras.Sequential(),
@@ -235,260 +242,327 @@ model = PGNN(
 
     lambda_default=0.5,
     lambda_physics=0.5,
-
+    apply_filter=True
     # early_stop_limit=2e-6
 )
 
 # %%
-tic_closed_loop = time.perf_counter()  # Start Time
-print('Starting Time:', tic_closed_loop)
 
-model.train_model(tf.constant(X_train_HyperParametersModel, dtype=tf.float32), tf.constant(
-    y_train_HyperParametersModel, dtype=tf.float32), num_epochs=50,)
+def get_PGNN(apply_filter):
+    model = PGNN(
 
-toc_closed_loop = time.perf_counter()  # End Time
-print('Closing Time:', tic_closed_loop)
-print(
-    f"Build finished in  closed_loop {(toc_closed_loop - tic_closed_loop)/60:0.0f} minutes {(toc_closed_loop - tic_closed_loop)%60:0.0f} seconds")
-print('Closed Loop Simulation Ended')
+        # tf.keras.Sequential(),
 
-# %%
+        tf.keras.layers.Flatten(
+            input_shape=[X_train_HyperParametersModel.shape[1]]),
 
-get_loss_training_set = model.get_loss(tf.constant(X_train_HyperParametersModel, dtype=tf.float32), tf.constant(
-    y_train_HyperParametersModel, dtype=tf.float32))
-print('Loss on Training Set:', get_loss_training_set)
-get_loss_testing_set = model.get_loss(tf.constant(X_test_HyperParametersModel, dtype=tf.float32), tf.constant(
-    y_test_HyperParametersModel, dtype=tf.float32))
-print('Loss on Testing Set:', get_loss_training_set)
+        tf.keras.layers.Dense(units_nodes_, kernel_initializer=xavier,
+                              activation="sigmoid"),
 
-# %%
-# plot the model prediction for the training and testing datasets
-y_pred_train = model.predict(tf.constant(
-    X_train_HyperParametersModel, dtype=tf.float32)).numpy()
+        tf.keras.layers.Dense(units_nodes_, kernel_initializer=xavier,
+                              activation="sigmoid"),
 
-y_pred_test = model.predict(tf.constant(
-    X_test_HyperParametersModel, dtype=tf.float32)).numpy()
+        tf.keras.layers.Dense(units_nodes_, kernel_initializer=xavier,
+                              activation="sigmoid"),
 
-# %%
-time_x_axis_training = np.linspace(0, 3000, 3000)
-time_x_axis_testing = np.linspace(
-    3000, int(3600 - input_delay_size), int(3600 - input_delay_size - 3000),)
-column_plot = int(24)
+        tf.keras.layers.Dense(units_nodes_, kernel_initializer=xavier,
+                              activation="sigmoid"),
+
+        tf.keras.layers.Dense(4, kernel_initializer=xavier),
+
+        optimizer=tf.keras.optimizers.SGD(
+            learning_rate=learning_rate[0], momentum=momentum_best[0]),
+
+        default_loss_function='mse',
+
+        physics_loss_function=network_derivative_loss(tf.constant(
+            X_test_HyperParametersModel, dtype=tf.float32)),
+
+        lambda_default=0.8,
+        lambda_physics=0.2,
+        apply_filter=apply_filter
+        # early_stop_limit=2e-6
+    )
+    return model
+
+training_time_list = []
+training_loss_list = []
+average_time_list = []
+average_loss_list = []
+epoch_list = []
+for j in range(5,6):
+    for i in range(3):
+        epochs = 50 * (j+1)
+        epoch_list.append(epochs)
+        model = get_PGNN(True)
+        tic_closed_loop = time.process_time()  # Start Time
+        #print('Starting Time:', tic_closed_loop)
+
+        [loss, tic_toc] = model.train_model(tf.constant(X_train_HyperParametersModel, dtype=tf.float32), tf.constant(
+            y_train_HyperParametersModel, dtype=tf.float32), num_epochs=epochs)
+        toc_closed_loop = time.process_time()  # End Time
+        training_time_list.append(toc_closed_loop-tic_closed_loop)
+        training_loss_list.append(loss)
+
+    average_time = sum(training_time_list)/len(training_time_list)
+    average_loss = sum(training_loss_list)/len(training_loss_list)
+
+
+    average_loss_list.append(average_loss)
+    average_time_list.append(average_time)
+
+    print(average_time_list)
+    print(average_loss_list)
+# with open("results.txt", "w") as f:
+#     for (l, t) in zip(average_loss_list, average_time_list):
+#         f.write("{0},{1}\n".format(l,t))
+# modelVan.fit(tf.constant(X_train_HyperParametersModel), tf.constant(y_train_HyperParametersModel), batch_size=64, epochs=100)
+
+
+
+
+#print('Closing Time:', tic_closed_loop)
+# print(
+#     f"Build finished in  closed_loop {(toc_closed_loop - tic_closed_loop)/60:0.0f} minutes {(toc_closed_loop - tic_closed_loop)%60:0.0f} seconds")
+# print('Closed Loop Simulation Ended')
+#
+# # %%
+#
+# get_loss_training_set = model.get_loss(tf.constant(X_train_HyperParametersModel, dtype=tf.float32), tf.constant(
+#     y_train_HyperParametersModel, dtype=tf.float32))
+# print('Loss on Training Set:', get_loss_training_set)
+# get_loss_testing_set = model.get_loss(tf.constant(X_test_HyperParametersModel, dtype=tf.float32), tf.constant(
+#     y_test_HyperParametersModel, dtype=tf.float32))
+# print('Loss on Testing Set:', get_loss_training_set)
+#
+# # %%
+# # plot the model prediction for the training and testing datasets
+# y_pred_train = model.predict(tf.constant(
+#     X_train_HyperParametersModel, dtype=tf.float32)).numpy()
+#
+# y_pred_test = model.predict(tf.constant(
+#     X_test_HyperParametersModel, dtype=tf.float32)).numpy()
+#
+# # %%
+# time_x_axis_training = np.linspace(0, 3000, 3000)
 # time_x_axis_testing = np.linspace(
-#     3000, 3583, 583)
-# %%
-print('Closed Loop Simulation on PGNN for TRAINING data sets: the Concentration of reactant A (CA) and the Concentration of reactant B (CB)')
-
-fig_training_temperatures, axes = plt.subplots(3, sharex=True)
-fig_training_temperatures.suptitle(
-    'Closed Loop Simulation on PGNN for TRAINING data sets: the Concentration of reactant A (CA) and the Concentration of reactant B (CB)')
-plt.rcParams["figure.figsize"] = (25, 15)
-
-axes[0].plot(time_x_axis_training, y_train_HyperParametersModel[0],
-             color='b',  label=["Simulated: CA"])
-axes[0].plot(time_x_axis_training, y_pred_train[:, 0], color='red',
-             linestyle='dashed', label=["Neural Network: CA"])
-axes[0].set_ylabel(' Concentration of reactant A (CA)')
-axes[0].legend(loc='upper right')
-
-axes[1].plot(time_x_axis_training, y_train_HyperParametersModel[1],
-             color='b',  label=["Simulated: CB"])
-axes[1].plot(time_x_axis_training, y_pred_train[:, 1], color='red',
-             linestyle='dashed', label=["Neural Network: CB"])
-axes[1].set_ylabel(' Concentration of reactant B (CB)')
-axes[1].legend(loc='upper right')
-
-axes[2].plot(time_x_axis_training, X_train_HyperParametersModel.loc[0:3000, int(
-    column_plot-2)], label=["F"])
-axes[2].plot(time_x_axis_training, X_train_HyperParametersModel.loc[0:3000, int(
-    column_plot-1)], label=["Q_dot"])
-
-axes[2].set_ylabel('Inputs: Feed and Heat Flow ')
-axes[2].set_xlabel('Time ')
-axes[2].legend(loc='upper right')
-# %%
-print('the Concentration of reactant A (CA)')
-plt.plot(time_x_axis_training, y_train_HyperParametersModel[0], 'b')
-plt.plot(time_x_axis_training, y_pred_train[:, 0], 'r--')
-plt.title('Closed Loop Simulation on PGNN for TRAINING data sets: the Concentration of reactant A (CA)')
-plt.xlabel('time')
-plt.ylabel('Concentration of reactant A (CA)')
-plt.legend(['Expected: CA', 'NN: CA'])
-plt.show()
-# %%
-print('Closed Loop Simulation on PGNN for TRAINING data sets: the temperature inside the reactor (TR) and the temperature of the cooling jacket (TK)')
-
-fig_training_temperatures, axes = plt.subplots(3, sharex=True)
-fig_training_temperatures.suptitle(
-    'Closed Loop Simulation on PGNN for TRAINING data sets: the temperature inside the reactor (TR) and the temperature of the cooling jacket (TK)')
-plt.rcParams["figure.figsize"] = (25, 7)
-
-axes[0].plot(time_x_axis_training, y_train_HyperParametersModel[2],
-             color='b',  label=["Simulated: TR"])
-axes[0].plot(time_x_axis_training, y_pred_train[:, 2], color='red',
-             linestyle='dashed', label=["Neural Network: TR"])
-axes[0].set_ylabel(' Temperature of Reactor TR')
-axes[0].legend(loc='upper right')
-
-axes[1].plot(time_x_axis_training, y_train_HyperParametersModel[3],
-             color='b',  label=["Simulated: TK"])
-axes[1].plot(time_x_axis_training, y_pred_train[:, 3], color='red',
-             linestyle='dashed', label=["Neural Network: TK"])
-axes[1].set_ylabel(' Temperature of Reactor TK')
-axes[1].legend(loc='upper right')
-
-axes[2].plot(time_x_axis_training, X_train_HyperParametersModel.loc[0:3000, int(
-    column_plot-2)], label=["F"])
-axes[2].plot(time_x_axis_training, X_train_HyperParametersModel.loc[0:3000, int(
-    column_plot-1)], label=["Q_dot"])
-
-axes[2].set_ylabel('Inputs: Feed and Heat Flow ')
-axes[2].set_xlabel('Time ')
-axes[2].legend(loc='upper right')
-# %%
-print('the Concentration of reactant B (CB)')
-
-#plt.figure(random.randint(1, 3000))
-plt.rcParams["figure.figsize"] = (28, 15)
-plt.plot(time_x_axis_training, y_train_HyperParametersModel[1], 'b')
-plt.plot(time_x_axis_training, y_pred_train[:, 1], 'r--')
-plt.title('Closed Loop Simulation on PGNN for TRAINING data: the Concentration of reactant B (CB)')
-plt.xlabel('time')
-plt.ylabel('Concentration of reactant B (CB)')
-plt.legend(['Expected: CB', 'NN: CB'])
-plt.show()
-# %%
-
-#plt.figure(random.randint(1, 3000))
-plt.rcParams["figure.figsize"] = (28, 15)
-plt.plot(time_x_axis_testing, y_test_HyperParametersModel[0], 'b')
-plt.plot(time_x_axis_testing, y_pred_test[:, 0], 'r--')
-plt.title('Closed Loop Simulation on PGNN for TESTING data sets: the Concentration of reactant A (CA)')
-plt.xlabel('time')
-plt.ylabel('h(t)/m')
-plt.legend(['Expected: CA', 'NN: CA'])
-plt.show()
-# %%
-
-
-#plt.figure(random.randint(1, 3000))
-plt.rcParams["figure.figsize"] = (28, 15)
-plt.plot(time_x_axis_testing, y_test_HyperParametersModel[1], 'b')
-plt.plot(time_x_axis_testing, y_pred_test[:, 1], 'r--')
-plt.title('Closed Loop Simulation on PGNN for TESTING data: the Concentration of reactant B (CB)')
-plt.xlabel('time')
-plt.ylabel('h(t)/m')
-plt.legend(['Expected: CB', 'NN: CB'])
-plt.show()
-
-# %%
-concatenate_output_expected = pd.concat(
-    [y_train_HyperParametersModel, y_test_HyperParametersModel], axis=0,)
-y_pred_train_dataframe = pd.DataFrame(y_pred_train)
-y_pred_test_dataframe = pd.DataFrame(y_pred_test)
-concatenate_output_predicted = pd.concat(
-    [y_pred_train_dataframe, y_pred_test_dataframe], axis=0)
-
-# %%
-time_x_axis_combined = np.linspace(
-    0, int(3600 - input_delay_size), int(3600 - input_delay_size))
-
-# %%
-print('the Concentration of reactant A (CA): Combined')
-#plt.figure(random.randint(1, 3000))
-plt.rcParams["figure.figsize"] = (25, 10)
-plt.plot(time_x_axis_combined, concatenate_output_expected[0], 'b')
-plt.plot(time_x_axis_combined, concatenate_output_predicted[0], 'r--')
-plt.title('Closed Loop Simulation on PGNN for TRAINING data sets: the Concentration of reactant A (CA)')
-plt.xlabel('time')
-plt.ylabel('Concentration of reactant A (CA)')
-plt.legend(['Simulated: CA', 'PGNN: CA'])
-plt.show()
-
-# %%
-print('the Concentration of reactant B (CB)')
-
-#plt.figure(random.randint(1, 3000))
-plt.rcParams["figure.figsize"] = (25, 10)
-plt.plot(time_x_axis_combined, concatenate_output_expected[1], 'b')
-plt.plot(time_x_axis_combined, concatenate_output_predicted[1], 'r--')
-plt.title('Closed Loop Simulation on PGNN for TRAINING data: the Concentration of reactant B (CB)')
-plt.xlabel('time')
-plt.ylabel('Concentration of reactant B (CB)')
-plt.legend(['Simulated: CB', 'PGNN: CB'])
-plt.show()
-
-# %%
-
-# =============================================================================
-# =============================================================================
-# =============================================================================
-
-
-# %%
-# Collecting all of the Data Points for the graphs to construct
-input_simulated_comined_HyperParametersModel = pd.concat(
-    [X_train_HyperParametersModel, X_test_HyperParametersModel], ignore_index=True)
-output_simulated_comined_HyperParametersModel = pd.concat(
-    [y_train_HyperParametersModel, y_test_HyperParametersModel], ignore_index=True)
-
-time_x_axis_complete = np.linspace(0, 3596, 3596)
-# %%
-# 1
-print('Input Data: Feed F and heat flow Q_dot respectivley')
-
-plt.rcParams["figure.figsize"] = (25, 10)
-
-plt.plot(time_x_axis_complete,
-         input_simulated_comined_HyperParametersModel[22], "green", linestyle='dashed', label="Feed F ")
-plt.plot(time_x_axis_complete,
-         input_simulated_comined_HyperParametersModel[23], color='blue', linestyle='dashed', label="Heat Flow Q_dot")
-plt.title("Input Data: Feed F and heat flow Q_dot respectivley")
-plt.xlabel("Time Step")
-plt.ylabel("Feed F and Heat Flow Q_dot")
-plt.legend(loc="upper right")
-plt.show()
-# %%
-# 2
-print('Output Data: Concentrations of reactant A and B (C_A, C_B) and Temperatures (T_R, T_J)')
-
-plt.rcParams["figure.figsize"] = (25, 10)
-
-plt.plot(time_x_axis_complete,
-         output_simulated_comined_HyperParametersModel[0], "black",  label="C_A")
-plt.plot(time_x_axis_complete,
-         output_simulated_comined_HyperParametersModel[1], color='magenta', label="C_B")
-plt.plot(time_x_axis_complete,
-         output_simulated_comined_HyperParametersModel[2], color='red', label="T_R")
-plt.plot(time_x_axis_complete,
-         output_simulated_comined_HyperParametersModel[3], color='cyan', label="T_J")
-
-plt.title("Output Data: Concentrations of reactant A and B (C_A, C_B) and Temperatures (T_R, T_J)")
-plt.xlabel("Time Step")
-plt.ylabel("Output Data of Concentrations: C_A, C_B and Temperatures: T_R, T_J")
-plt.legend(loc="upper right")
-plt.show()
-# %%
-fig_training_temperatures, axes = plt.subplots(2, sharex=True)
-plt.rcParams["figure.figsize"] = (25, 10)
-fig_training_temperatures.suptitle(
-    'Input Data: Feed F and heat flow Q_dot respectivley & Output Data: Concentrations of reactant A and B (C_A, C_B) and Temperatures (T_R, T_J)')
-
-axes[0].plot(time_x_axis_complete,
-             output_simulated_comined_HyperParametersModel[0], "black",  label="C_A")
-axes[0].plot(time_x_axis_complete,
-             output_simulated_comined_HyperParametersModel[1], color='magenta', label="C_B")
-axes[0].plot(time_x_axis_complete,
-             output_simulated_comined_HyperParametersModel[2], color='red', label="T_R")
-axes[0].plot(time_x_axis_complete,
-             output_simulated_comined_HyperParametersModel[3], color='cyan', label="T_J")
-axes[0].set_ylabel(' Output Data')
-axes[0].legend(loc='upper right')
-
-
-axes[1].plot(input_simulated_comined_HyperParametersModel[22],
-             color='green', linestyle='dashed', label=["Feed: F"])
-axes[1].plot(input_simulated_comined_HyperParametersModel[23],
-             color='blue', linestyle='dashed', label=["Heat Flow: Q_dot"])
-axes[1].set_ylabel(' Input Data')
-axes[1].legend(loc='upper right')
+#     3000, int(3600 - input_delay_size), int(3600 - input_delay_size - 3000),)
+# column_plot = int(24)
+# # time_x_axis_testing = np.linspace(
+# #     3000, 3583, 583)
+# # %%
+# print('Closed Loop Simulation on PGNN for TRAINING data sets: the Concentration of reactant A (CA) and the Concentration of reactant B (CB)')
+#
+# fig_training_temperatures, axes = plt.subplots(3, sharex=True)
+# fig_training_temperatures.suptitle(
+#     'Closed Loop Simulation on PGNN for TRAINING data sets: the Concentration of reactant A (CA) and the Concentration of reactant B (CB)')
+# plt.rcParams["figure.figsize"] = (25, 15)
+#
+# axes[0].plot(time_x_axis_training, y_train_HyperParametersModel[0],
+#              color='b',  label=["Simulated: CA"])
+# axes[0].plot(time_x_axis_training, y_pred_train[:, 0], color='red',
+#              linestyle='dashed', label=["Neural Network: CA"])
+# axes[0].set_ylabel(' Concentration of reactant A (CA)')
+# axes[0].legend(loc='upper right')
+#
+# axes[1].plot(time_x_axis_training, y_train_HyperParametersModel[1],
+#              color='b',  label=["Simulated: CB"])
+# axes[1].plot(time_x_axis_training, y_pred_train[:, 1], color='red',
+#              linestyle='dashed', label=["Neural Network: CB"])
+# axes[1].set_ylabel(' Concentration of reactant B (CB)')
+# axes[1].legend(loc='upper right')
+#
+# axes[2].plot(time_x_axis_training, X_train_HyperParametersModel.loc[0:3000, int(
+#     column_plot-2)], label=["F"])
+# axes[2].plot(time_x_axis_training, X_train_HyperParametersModel.loc[0:3000, int(
+#     column_plot-1)], label=["Q_dot"])
+#
+# axes[2].set_ylabel('Inputs: Feed and Heat Flow ')
+# axes[2].set_xlabel('Time ')
+# axes[2].legend(loc='upper right')
+# # %%
+# print('the Concentration of reactant A (CA)')
+# plt.plot(time_x_axis_training, y_train_HyperParametersModel[0], 'b')
+# plt.plot(time_x_axis_training, y_pred_train[:, 0], 'r--')
+# plt.title('Closed Loop Simulation on PGNN for TRAINING data sets: the Concentration of reactant A (CA)')
+# plt.xlabel('time')
+# plt.ylabel('Concentration of reactant A (CA)')
+# plt.legend(['Expected: CA', 'NN: CA'])
+# plt.show()
+# # %%
+# print('Closed Loop Simulation on PGNN for TRAINING data sets: the temperature inside the reactor (TR) and the temperature of the cooling jacket (TK)')
+#
+# fig_training_temperatures, axes = plt.subplots(3, sharex=True)
+# fig_training_temperatures.suptitle(
+#     'Closed Loop Simulation on PGNN for TRAINING data sets: the temperature inside the reactor (TR) and the temperature of the cooling jacket (TK)')
+# plt.rcParams["figure.figsize"] = (25, 7)
+#
+# axes[0].plot(time_x_axis_training, y_train_HyperParametersModel[2],
+#              color='b',  label=["Simulated: TR"])
+# axes[0].plot(time_x_axis_training, y_pred_train[:, 2], color='red',
+#              linestyle='dashed', label=["Neural Network: TR"])
+# axes[0].set_ylabel(' Temperature of Reactor TR')
+# axes[0].legend(loc='upper right')
+#
+# axes[1].plot(time_x_axis_training, y_train_HyperParametersModel[3],
+#              color='b',  label=["Simulated: TK"])
+# axes[1].plot(time_x_axis_training, y_pred_train[:, 3], color='red',
+#              linestyle='dashed', label=["Neural Network: TK"])
+# axes[1].set_ylabel(' Temperature of Reactor TK')
+# axes[1].legend(loc='upper right')
+#
+# axes[2].plot(time_x_axis_training, X_train_HyperParametersModel.loc[0:3000, int(
+#     column_plot-2)], label=["F"])
+# axes[2].plot(time_x_axis_training, X_train_HyperParametersModel.loc[0:3000, int(
+#     column_plot-1)], label=["Q_dot"])
+#
+# axes[2].set_ylabel('Inputs: Feed and Heat Flow ')
+# axes[2].set_xlabel('Time ')
+# axes[2].legend(loc='upper right')
+# # %%
+# print('the Concentration of reactant B (CB)')
+#
+# #plt.figure(random.randint(1, 3000))
+# plt.rcParams["figure.figsize"] = (28, 15)
+# plt.plot(time_x_axis_training, y_train_HyperParametersModel[1], 'b')
+# plt.plot(time_x_axis_training, y_pred_train[:, 1], 'r--')
+# plt.title('Closed Loop Simulation on PGNN for TRAINING data: the Concentration of reactant B (CB)')
+# plt.xlabel('time')
+# plt.ylabel('Concentration of reactant B (CB)')
+# plt.legend(['Expected: CB', 'NN: CB'])
+# plt.show()
+# # %%
+#
+# #plt.figure(random.randint(1, 3000))
+# plt.rcParams["figure.figsize"] = (28, 15)
+# plt.plot(time_x_axis_testing, y_test_HyperParametersModel[0], 'b')
+# plt.plot(time_x_axis_testing, y_pred_test[:, 0], 'r--')
+# plt.title('Closed Loop Simulation on PGNN for TESTING data sets: the Concentration of reactant A (CA)')
+# plt.xlabel('time')
+# plt.ylabel('h(t)/m')
+# plt.legend(['Expected: CA', 'NN: CA'])
+# plt.show()
+# # %%
+#
+#
+# #plt.figure(random.randint(1, 3000))
+# plt.rcParams["figure.figsize"] = (28, 15)
+# plt.plot(time_x_axis_testing, y_test_HyperParametersModel[1], 'b')
+# plt.plot(time_x_axis_testing, y_pred_test[:, 1], 'r--')
+# plt.title('Closed Loop Simulation on PGNN for TESTING data: the Concentration of reactant B (CB)')
+# plt.xlabel('time')
+# plt.ylabel('h(t)/m')
+# plt.legend(['Expected: CB', 'NN: CB'])
+# plt.show()
+#
+# # %%
+# concatenate_output_expected = pd.concat(
+#     [y_train_HyperParametersModel, y_test_HyperParametersModel], axis=0,)
+# y_pred_train_dataframe = pd.DataFrame(y_pred_train)
+# y_pred_test_dataframe = pd.DataFrame(y_pred_test)
+# concatenate_output_predicted = pd.concat(
+#     [y_pred_train_dataframe, y_pred_test_dataframe], axis=0)
+#
+# # %%
+# time_x_axis_combined = np.linspace(
+#     0, int(3600 - input_delay_size), int(3600 - input_delay_size))
+#
+# # %%
+# print('the Concentration of reactant A (CA): Combined')
+# #plt.figure(random.randint(1, 3000))
+# plt.rcParams["figure.figsize"] = (25, 10)
+# plt.plot(time_x_axis_combined, concatenate_output_expected[0], 'b')
+# plt.plot(time_x_axis_combined, concatenate_output_predicted[0], 'r--')
+# plt.title('Closed Loop Simulation on PGNN for TRAINING data sets: the Concentration of reactant A (CA)')
+# plt.xlabel('time')
+# plt.ylabel('Concentration of reactant A (CA)')
+# plt.legend(['Simulated: CA', 'PGNN: CA'])
+# plt.show()
+#
+# # %%
+# print('the Concentration of reactant B (CB)')
+#
+# #plt.figure(random.randint(1, 3000))
+# plt.rcParams["figure.figsize"] = (25, 10)
+# plt.plot(time_x_axis_combined, concatenate_output_expected[1], 'b')
+# plt.plot(time_x_axis_combined, concatenate_output_predicted[1], 'r--')
+# plt.title('Closed Loop Simulation on PGNN for TRAINING data: the Concentration of reactant B (CB)')
+# plt.xlabel('time')
+# plt.ylabel('Concentration of reactant B (CB)')
+# plt.legend(['Simulated: CB', 'PGNN: CB'])
+# plt.show()
+#
+# # %%
+#
+# # =============================================================================
+# # =============================================================================
+# # =============================================================================
+#
+#
+# # %%
+# # Collecting all of the Data Points for the graphs to construct
+# input_simulated_comined_HyperParametersModel = pd.concat(
+#     [X_train_HyperParametersModel, X_test_HyperParametersModel], ignore_index=True)
+# output_simulated_comined_HyperParametersModel = pd.concat(
+#     [y_train_HyperParametersModel, y_test_HyperParametersModel], ignore_index=True)
+#
+# time_x_axis_complete = np.linspace(0, 3596, 3596)
+# # %%
+# # 1
+# print('Input Data: Feed F and heat flow Q_dot respectivley')
+#
+# plt.rcParams["figure.figsize"] = (25, 10)
+#
+# plt.plot(time_x_axis_complete,
+#          input_simulated_comined_HyperParametersModel[22], "green", linestyle='dashed', label="Feed F ")
+# plt.plot(time_x_axis_complete,
+#          input_simulated_comined_HyperParametersModel[23], color='blue', linestyle='dashed', label="Heat Flow Q_dot")
+# plt.title("Input Data: Feed F and heat flow Q_dot respectivley")
+# plt.xlabel("Time Step")
+# plt.ylabel("Feed F and Heat Flow Q_dot")
+# plt.legend(loc="upper right")
+# plt.show()
+# # %%
+# # 2
+# print('Output Data: Concentrations of reactant A and B (C_A, C_B) and Temperatures (T_R, T_J)')
+#
+# plt.rcParams["figure.figsize"] = (25, 10)
+#
+# plt.plot(time_x_axis_complete,
+#          output_simulated_comined_HyperParametersModel[0], "black",  label="C_A")
+# plt.plot(time_x_axis_complete,
+#          output_simulated_comined_HyperParametersModel[1], color='magenta', label="C_B")
+# plt.plot(time_x_axis_complete,
+#          output_simulated_comined_HyperParametersModel[2], color='red', label="T_R")
+# plt.plot(time_x_axis_complete,
+#          output_simulated_comined_HyperParametersModel[3], color='cyan', label="T_J")
+#
+# plt.title("Output Data: Concentrations of reactant A and B (C_A, C_B) and Temperatures (T_R, T_J)")
+# plt.xlabel("Time Step")
+# plt.ylabel("Output Data of Concentrations: C_A, C_B and Temperatures: T_R, T_J")
+# plt.legend(loc="upper right")
+# plt.show()
+# # %%
+# fig_training_temperatures, axes = plt.subplots(2, sharex=True)
+# plt.rcParams["figure.figsize"] = (25, 10)
+# fig_training_temperatures.suptitle(
+#     'Input Data: Feed F and heat flow Q_dot respectivley & Output Data: Concentrations of reactant A and B (C_A, C_B) and Temperatures (T_R, T_J)')
+#
+# axes[0].plot(time_x_axis_complete,
+#              output_simulated_comined_HyperParametersModel[0], "black",  label="C_A")
+# axes[0].plot(time_x_axis_complete,
+#              output_simulated_comined_HyperParametersModel[1], color='magenta', label="C_B")
+# axes[0].plot(time_x_axis_complete,
+#              output_simulated_comined_HyperParametersModel[2], color='red', label="T_R")
+# axes[0].plot(time_x_axis_complete,
+#              output_simulated_comined_HyperParametersModel[3], color='cyan', label="T_J")
+# axes[0].set_ylabel(' Output Data')
+# axes[0].legend(loc='upper right')
+#
+#
+# axes[1].plot(input_simulated_comined_HyperParametersModel[22],
+#              color='green', linestyle='dashed', label=["Feed: F"])
+# axes[1].plot(input_simulated_comined_HyperParametersModel[23],
+#              color='blue', linestyle='dashed', label=["Heat Flow: Q_dot"])
+# axes[1].set_ylabel(' Input Data')
+# axes[1].legend(loc='upper right')
